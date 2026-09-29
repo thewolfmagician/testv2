@@ -952,6 +952,7 @@ tbody tr:hover {
   margin-bottom: 0.3rem;
   color: var(--dark-color);
 }
+
 </style>
 </head>
 <body>
@@ -1183,7 +1184,584 @@ tbody tr:hover {
 </div>
 
 <script>
-// __PASTE module7-payments.js, module8-sales.js, module9-expenses.js HERE__
+/* MODULE 7 — PAYMENTS & RECEIPTS
+   Input -> Process -> Output
+*/
+(function () {
+  'use strict';
+
+  window.PaymentsModule = {
+    orders: [],
+    pending: [],
+    payments: [],
+    receipts: [],
+    nextPaymentId: 1,
+    nextReceiptId: 1,
+    onPaymentReceived: null,
+
+    init: function (orders, hooks) {
+      this.orders = Array.isArray(orders) ? orders : [];
+      this.onPaymentReceived = hooks && hooks.onPaymentReceived ? hooks.onPaymentReceived : null;
+      this.pending = [];
+      this.payments = [];
+      this.receipts = [];
+      this.nextPaymentId = 1;
+      this.nextReceiptId = 1;
+      this.bindEvents();
+      this.populateOrders();
+      this.renderAll();
+    },
+
+    bindEvents: function () {
+      var form = document.getElementById('pmForm');
+      var method = document.getElementById('pmMethod');
+      if (form && !form.dataset.bound) {
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          PaymentsModule.submitFromForm();
+        });
+        form.dataset.bound = '1';
+      }
+      if (method && !method.dataset.bound) {
+        method.addEventListener('change', function () {
+          PaymentsModule.updateProofRequirement();
+        });
+        method.dataset.bound = '1';
+      }
+    },
+
+    populateOrders: function () {
+      var select = document.getElementById('pmOrderSelect');
+      if (!select) return;
+      var html = '';
+      var eligible = this.orders.filter(function (o) {
+        return o && o.status !== 'cancelled';
+      });
+      eligible.forEach(function (o) {
+        var paid = PaymentsModule.getConfirmedTotal(o.orderId);
+        var remaining = Math.max(0, Number(o.totalPrice || 0) - paid);
+        if (remaining > 0) {
+          html += '<option value="' + o.orderId + '">Order #' + o.orderId + ' — ' +
+            escapeHtml(o.customerName || 'Customer') + ' — ' + money(remaining) + ' remaining</option>';
+        }
+      });
+      select.innerHTML = html || '<option value="">No unpaid orders</option>';
+    },
+
+    updateProofRequirement: function () {
+      var method = document.getElementById('pmMethod');
+      var wrap = document.getElementById('pmProofWrap');
+      var proof = document.getElementById('pmProof');
+      if (!method || !wrap) return;
+      var needsProof = method.value === 'GCash' || method.value === 'Bank Transfer';
+      wrap.style.display = needsProof ? '' : 'none';
+      if (proof) proof.required = needsProof;
+    },
+
+    submitFromForm: function () {
+      clearError('pmFormError');
+      var orderId = Number(value('pmOrderSelect'));
+      var amount = Number(value('pmAmount'));
+      var method = value('pmMethod');
+      var proofInput = document.getElementById('pmProof');
+      var proof = proofInput && proofInput.files.length ? proofInput.files[0].name : '';
+      var isDown = !!(document.getElementById('pmIsDown') && document.getElementById('pmIsDown').checked);
+
+      var result = this.recordPayment({
+        orderId: orderId,
+        amount: amount,
+        paymentMethod: method,
+        isDownPayment: isDown,
+        proofOfPaymentFile: proof
+      });
+
+      if (!result.ok) {
+        setError('pmFormError', result.error);
+        return;
+      }
+
+      /* INPUT accepted -> PROCESS queues the payment -> OUTPUT appears in FIFO table. */
+      this.renderAll();
+      this.populateOrders();
+      var form = document.getElementById('pmForm');
+      if (form) form.reset();
+      this.updateProofRequirement();
+      toast('Payment queued for confirmation.', 'success');
+    },
+
+    recordPayment: function (data) {
+      data = data || {};
+      var order = this.orders.find(function (o) { return Number(o.orderId) === Number(data.orderId); });
+      var amount = Number(data.amount);
+      var method = data.paymentMethod;
+      var proof = data.proofOfPaymentFile || '';
+
+      if (!order) return fail('Please select a valid order.');
+      if (!Number.isFinite(amount) || amount <= 0) return fail('Payment amount must be greater than zero.');
+      if (!['Cash', 'GCash', 'Bank Transfer'].includes(method)) return fail('Invalid payment method.');
+      if ((method === 'GCash' || method === 'Bank Transfer') && !proof) {
+        return fail('Proof of payment is required for GCash or Bank Transfer.');
+      }
+
+      var alreadyPaid = this.getConfirmedTotal(order.orderId) + this.getPendingTotal(order.orderId);
+      var remaining = Number(order.totalPrice || 0) - alreadyPaid;
+      if (remaining <= 0) return fail('This order is already fully paid.');
+      if (amount > remaining + 0.0001) return fail('Payment cannot exceed the remaining balance of ' + money(remaining) + '.');
+
+      var queued = {
+        queueId: Date.now() + Math.random(),
+        orderId: order.orderId,
+        customerName: order.customerName || 'Customer',
+        amount: amount,
+        paymentMethod: method,
+        isDownPayment: !!data.isDownPayment,
+        proofOfPaymentFile: proof,
+        dateSubmitted: new Date().toISOString()
+      };
+      this.pending.push(queued);
+      return { ok: true, pending: queued };
+    },
+
+    confirmPayment: function (queueId) {
+      var index = this.pending.findIndex(function (p) { return String(p.queueId) === String(queueId); });
+      if (index < 0) return fail('Payment is no longer in the confirmation queue.');
+      if (index !== 0) return fail('Payments must be confirmed in FIFO order.');
+
+      var p = this.pending.shift();
+      var order = this.orders.find(function (o) { return Number(o.orderId) === Number(p.orderId); });
+      if (!order) return fail('The linked order no longer exists.');
+
+      var payment = {
+        paymentId: this.nextPaymentId++,
+        orderId: p.orderId,
+        amount: p.amount,
+        paymentMethod: p.paymentMethod,
+        isDownPayment: p.isDownPayment,
+        proofOfPaymentFile: p.proofOfPaymentFile || null,
+        dateReceived: new Date().toISOString()
+      };
+      this.payments.push(payment);
+
+      var paid = this.getConfirmedTotal(order.orderId);
+      var total = Number(order.totalPrice || 0);
+      if (paid >= total) {
+        order.paymentStatus = 'fullyPaid';
+        order.downPaymentAmount = order.downPaymentAmount || 0;
+        var receipt = this.createReceipt(order);
+        if (this.onPaymentReceived) this.onPaymentReceived('PAYMENT', order, payment);
+        this.renderAll();
+        this.populateOrders();
+        toast('Payment confirmed. Receipt #' + receipt.receiptId + ' issued.', 'success');
+      } else if (p.isDownPayment || paid > 0) {
+        order.paymentStatus = 'downPaymentPaid';
+        order.downPaymentAmount = paid;
+        if (this.onPaymentReceived) this.onPaymentReceived('PAYMENT', order, payment);
+        this.renderAll();
+        this.populateOrders();
+        toast('Payment confirmed. Remaining balance: ' + money(total - paid), 'success');
+      }
+      return { ok: true, payment: payment };
+    },
+
+    confirmNextPayment: function () {
+      if (!this.pending.length) return fail('No payments are waiting for confirmation.');
+      return this.confirmPayment(this.pending[0].queueId);
+    },
+
+    getConfirmedTotal: function (orderId) {
+      return this.payments.filter(function (p) { return Number(p.orderId) === Number(orderId); })
+        .reduce(function (sum, p) { return sum + Number(p.amount || 0); }, 0);
+    },
+
+    getPendingTotal: function (orderId) {
+      return this.pending.filter(function (p) { return Number(p.orderId) === Number(orderId); })
+        .reduce(function (sum, p) { return sum + Number(p.amount || 0); }, 0);
+    },
+
+    createReceipt: function (order) {
+      var existing = this.receipts.find(function (r) { return Number(r.orderId) === Number(order.orderId); });
+      if (existing) return existing;
+      var receipt = {
+        receiptId: this.nextReceiptId++, orderId: order.orderId,
+        customerName: order.customerName || 'Customer', fileName: order.fileName || '',
+        pages: Number(order.pages || 0), copies: Number(order.copies || 0),
+        colorTier: order.colorTier || '', totalPrice: Number(order.totalPrice || 0),
+        isRush: !!order.isRush, dateIssued: new Date().toISOString()
+      };
+      this.receipts.push(receipt);
+      return receipt;
+    },
+
+    renderAll: function () {
+      this.renderPending();
+      this.renderPayments();
+      this.renderReceipts();
+    },
+
+    renderPending: function () {
+      var body = document.getElementById('pmPendingBody');
+      if (!body) return;
+      if (!this.pending.length) { body.innerHTML = emptyRow(8, 'No payments waiting for confirmation.'); return; }
+      body.innerHTML = this.pending.map(function (p, i) {
+        return '<tr><td>' + (i + 1) + '</td><td>#' + p.orderId + '</td><td>' + escapeHtml(p.customerName) +
+          '</td><td>' + money(p.amount) + '</td><td>' + escapeHtml(p.paymentMethod) + '</td><td>' +
+          (p.isDownPayment ? 'Down payment' : 'Full/regular payment') + '</td><td>' +
+          (p.proofOfPaymentFile ? escapeHtml(p.proofOfPaymentFile) : '—') + '</td><td>' +
+          '<button class="btn btn-success btn-small" onclick="PaymentsModule.confirmPayment(\'' + p.queueId + '\')">Confirm</button></td></tr>';
+      }).join('');
+    },
+
+    renderPayments: function () {
+      var body = document.getElementById('pmPaymentsBody');
+      if (!body) return;
+      if (!this.payments.length) { body.innerHTML = emptyRow(8, 'No confirmed payments yet.'); return; }
+      body.innerHTML = this.payments.map(function (p) {
+        var order = PaymentsModule.orders.find(function (o) { return Number(o.orderId) === Number(p.orderId); });
+        return '<tr><td>' + p.paymentId + '</td><td>#' + p.orderId + '</td><td>' + escapeHtml(order ? order.customerName : '—') +
+          '</td><td>' + money(p.amount) + '</td><td>' + escapeHtml(p.paymentMethod) + '</td><td>' +
+          (p.isDownPayment ? 'Down payment' : 'Regular') + '</td><td>' + (p.proofOfPaymentFile ? escapeHtml(p.proofOfPaymentFile) : '—') +
+          '</td><td>' + formatDateTime(p.dateReceived) + '</td></tr>';
+      }).join('');
+    },
+
+    renderReceipts: function () {
+      var body = document.getElementById('pmReceiptsBody');
+      if (!body) return;
+      if (!this.receipts.length) { body.innerHTML = emptyRow(6, 'Receipts will appear after an order is fully paid.'); return; }
+      body.innerHTML = this.receipts.map(function (r) {
+        return '<tr><td>' + r.receiptId + '</td><td>#' + r.orderId + '</td><td>' + escapeHtml(r.customerName) +
+          '</td><td>' + money(r.totalPrice) + '</td><td>' + formatDateTime(r.dateIssued) + '</td><td>' +
+          '<button class="btn btn-secondary btn-small" onclick="PaymentsModule.showReceipt(' + r.receiptId + ')">View</button></td></tr>';
+      }).join('');
+    },
+
+    showReceipt: function (receiptId) {
+      var r = this.receipts.find(function (x) { return Number(x.receiptId) === Number(receiptId); });
+      if (!r) return;
+      var body = document.getElementById('receiptModalBody');
+      var modal = document.getElementById('receiptModal');
+      if (!body || !modal) return;
+      body.innerHTML = '<p><strong>Receipt #' + r.receiptId + '</strong></p>' +
+        '<p>Order: #' + r.orderId + '<br>Customer: ' + escapeHtml(r.customerName) +
+        '<br>File: ' + escapeHtml(r.fileName || '—') + '<br>Pages: ' + r.pages +
+        '<br>Copies: ' + r.copies + '<br>Color tier: ' + escapeHtml(r.colorTier || '—') +
+        '<br>Total paid: <strong>' + money(r.totalPrice) + '</strong><br>Issued: ' + formatDateTime(r.dateIssued) + '</p>';
+      modal.className = 'modal-overlay open';
+    }
+  };
+
+  function value(id) { var e = document.getElementById(id); return e ? e.value : ''; }
+  function money(n) { return '₱' + Number(n || 0).toLocaleString('en-PH', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+  function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function emptyRow(n, text) { return '<tr class="empty-row"><td colspan="' + n + '">' + escapeHtml(text) + '</td></tr>'; }
+  function fail(error) { return {ok:false,error:error}; }
+  function clearError(id) { var e=document.getElementById(id); if(e)e.textContent=''; }
+  function setError(id,msg) { var e=document.getElementById(id); if(e)e.textContent=msg; }
+  function formatDateTime(s) { var d=new Date(s); return isNaN(d.getTime()) ? '—' : d.toLocaleString('en-PH'); }
+  function toast(msg, type) { if (typeof window.gsToast === 'function') window.gsToast(msg,type); else if (type !== 'success') console.warn(msg); }
+  window.gsFormatPeso = window.gsFormatPeso || money;
+  window.PaymentsModule._helpersReady = true;
+})();
+
+
+/* MODULE 8 — SALES REPORTING
+   Input -> Process -> Output
+   Reads completed Orders + Payments + Module 9 Expenses.
+*/
+(function () {
+  'use strict';
+
+  window.SalesModule = {
+    orders: [],
+    expenseProvider: function () { return []; },
+    rows: [],
+    sortField: 'reportDate',
+    sortDirection: 'desc',
+
+    init: function (orders) {
+      this.orders = Array.isArray(orders) ? orders : [];
+      this.bindEvents();
+      this.setDefaultDates();
+      this.generateReport();
+    },
+
+    setExpenseProvider: function (fn) {
+      this.expenseProvider = typeof fn === 'function' ? fn : function () { return []; };
+    },
+
+    bindEvents: function () {
+      var btn = document.getElementById('btnSrGenerate');
+      if (btn && !btn.dataset.bound) {
+        btn.addEventListener('click', function () { SalesModule.generateReport(); });
+        btn.dataset.bound = '1';
+      }
+    },
+
+    setDefaultDates: function () {
+      var from = document.getElementById('srFrom');
+      var to = document.getElementById('srTo');
+      if (from && !from.value) from.value = offsetDate(-14);
+      if (to && !to.value) to.value = todayKey();
+    },
+
+    refresh: function () { this.generateReport(); },
+
+    generateReport: function () {
+      var from = value('srFrom') || offsetDate(-14);
+      var to = value('srTo') || todayKey();
+      var period = value('srPeriod') || 'daily';
+      var examWeek = !!(document.getElementById('srExamWeek') && document.getElementById('srExamWeek').checked);
+
+      if (from > to) {
+        var temp = from; from = to; to = temp;
+        var f = document.getElementById('srFrom'), t = document.getElementById('srTo');
+        if (f) f.value = from; if (t) t.value = to;
+      }
+
+      /* INPUT: date range + period + exam-week flag.
+         PROCESS: aggregate completed orders and expenses into report periods.
+         OUTPUT: summary cards + report table. */
+      this.rows = this.buildRows(from, to, period, examWeek);
+      this.renderStats(this.rows);
+      this.renderTable();
+      return this.rows;
+    },
+
+    buildRows: function (from, to, period, examWeek) {
+      var completed = this.orders.filter(function (o) {
+        var d = orderDate(o);
+        return o && o.status === 'done' && d >= from && d <= to;
+      });
+      var expenses = this.expenseProvider() || [];
+      var filteredExpenses = expenses.filter(function (e) { return e.dateIncurred >= from && e.dateIncurred <= to; });
+      var groups = {};
+
+      completed.forEach(function (o) {
+        var key = groupKey(orderDate(o), period);
+        if (!groups[key]) groups[key] = makeRow(key, examWeek);
+        groups[key].totalOrders++;
+        groups[key].totalRushOrders += o.isRush ? 1 : 0;
+        groups[key].totalRevenue += Number(o.totalPrice || 0);
+      });
+
+      filteredExpenses.forEach(function (e) {
+        var key = groupKey(e.dateIncurred, period);
+        if (!groups[key]) groups[key] = makeRow(key, examWeek);
+        groups[key].totalExpenses += Number(e.amount || 0);
+      });
+
+      Object.keys(groups).forEach(function (key) { groups[key].netProfit = groups[key].totalRevenue - groups[key].totalExpenses; });
+      return Object.keys(groups).map(function(k){return groups[k];});
+    },
+
+    renderStats: function (rows) {
+      var orders = rows.reduce(function(s,r){return s+r.totalOrders;},0);
+      var rush = rows.reduce(function(s,r){return s+r.totalRushOrders;},0);
+      var revenue = rows.reduce(function(s,r){return s+r.totalRevenue;},0);
+      var expenses = rows.reduce(function(s,r){return s+r.totalExpenses;},0);
+      setText('srStatOrders', orders);
+      setText('srStatRush', rush);
+      setText('srStatRevenue', peso(revenue));
+      setText('srStatExpenses', peso(expenses));
+      setText('srStatNet', peso(revenue-expenses));
+    },
+
+    renderTable: function () {
+      var body = document.getElementById('srTableBody');
+      if (!body) return;
+      var rows = this.rows.slice();
+      var field = this.sortField, dir = this.sortDirection === 'asc' ? 1 : -1;
+      rows.sort(function(a,b){
+        var av=a[field], bv=b[field];
+        if(typeof av==='number' && typeof bv==='number') return (av-bv)*dir;
+        return String(av).localeCompare(String(bv))*dir;
+      });
+      if (!rows.length) { body.innerHTML='<tr class="empty-row"><td colspan="7">No completed orders or expenses fall inside this date range.</td></tr>'; return; }
+      body.innerHTML = rows.map(function(r){
+        return '<tr><td>' + esc(r.reportDate) + '</td><td>' + r.totalOrders + '</td><td>' + r.totalRushOrders +
+          '</td><td>' + peso(r.totalRevenue) + '</td><td>' + peso(r.totalExpenses) + '</td><td>' + peso(r.netProfit) +
+          '</td><td>' + (r.isExamWeek ? 'Yes' : 'No') + '</td></tr>';
+      }).join('');
+    },
+
+    sortBy: function (field) {
+      if (this.sortField === field) this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+      else { this.sortField = field; this.sortDirection = 'asc'; }
+      this.renderTable();
+    }
+  };
+
+  function makeRow(key, exam){return {reportDate:key,totalOrders:0,totalRevenue:0,totalRushOrders:0,totalExpenses:0,netProfit:0,isExamWeek:!!exam};}
+  function groupKey(date, period){
+    if(period==='monthly') return String(date).slice(0,7);
+    if(period==='weekly'){
+      var d=parseDate(date), day=d.getDay(); d.setDate(d.getDate()-(day===0?6:day-1)); return key(d);
+    }
+    return String(date).slice(0,10);
+  }
+  function orderDate(o){return String(o.dateCompleted || o.dateAdded || '').slice(0,10);}
+  function parseDate(s){var p=String(s).slice(0,10).split('-');return new Date(Number(p[0]),Number(p[1])-1,Number(p[2]));}
+  function key(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  function todayKey(){return key(new Date());}
+  function offsetDate(n){var d=new Date();d.setDate(d.getDate()+n);return key(d);}
+  function value(id){var e=document.getElementById(id);return e?e.value:'';}
+  function setText(id,v){var e=document.getElementById(id);if(e)e.textContent=v;}
+  function peso(n){return '₱'+Number(n||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});}
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  window.srTodayKey=todayKey; window.srParseDay=parseDate; window.srDayKey=key;
+})();
+
+
+/* MODULE 9 — EXPENSE MANAGEMENT
+   Input -> Process -> Output
+*/
+(function () {
+  'use strict';
+
+  window.ExpensesModule = {
+    expenses: [],
+    users: [],
+    nextExpenseId: 1,
+
+    init: function (seedExpenses) {
+      this.expenses = Array.isArray(seedExpenses) ? seedExpenses.slice() : [];
+      this.nextExpenseId = this.expenses.reduce(function (m, e) { return Math.max(m, Number(e.expenseId) || 0); }, 0) + 1;
+      this.bindForm();
+      this.setDefaultDate();
+      this.renderAll();
+    },
+
+    setUsers: function (users) {
+      this.users = Array.isArray(users) ? users : [];
+      var select = document.getElementById('exRecordedBy');
+      if (!select) return;
+      select.innerHTML = this.users.map(function (u) {
+        return '<option value="' + Number(u.userId) + '">' + esc(u.fullName || u.username || ('User #' + u.userId)) + '</option>';
+      }).join('');
+    },
+
+    bindForm: function () {
+      var form = document.getElementById('exForm');
+      if (!form || form.dataset.bound) return;
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        ExpensesModule.submitFromForm();
+      });
+      form.dataset.bound = '1';
+    },
+
+    setDefaultDate: function () {
+      var date = document.getElementById('exDate');
+      if (date && !date.value) date.value = todayKey();
+    },
+
+    submitFromForm: function () {
+      setError('exFormError', '');
+      var result = this.addExpense({
+        category: val('exCategory'),
+        amount: Number(val('exAmount')),
+        dateIncurred: val('exDate'),
+        recordedBy: Number(val('exRecordedBy')),
+        description: val('exDescription').trim()
+      });
+      if (!result.ok) {
+        setError('exFormError', result.error);
+        return;
+      }
+      this.renderAll();
+      var form = document.getElementById('exForm');
+      if (form) form.reset();
+      this.setDefaultDate();
+      toast('Expense added successfully.', 'success');
+      if (window.SalesModule && typeof window.SalesModule.refresh === 'function') window.SalesModule.refresh();
+    },
+
+    addExpense: function (data) {
+      data = data || {};
+      var allowed = ['Rent','Utilities','Supplies','Equipment Repair','Other'];
+      if (!allowed.includes(data.category)) return fail('Please select a valid expense category.');
+      if (!Number.isFinite(data.amount) || data.amount <= 0) return fail('Expense amount must be greater than zero.');
+      if (!data.dateIncurred) return fail('Please enter the date the expense was incurred.');
+      if (!data.recordedBy) return fail('Please select who recorded the expense.');
+      if (!data.description) return fail('Please enter a description for the expense.');
+
+      var expense = {
+        expenseId: this.nextExpenseId++,
+        category: data.category,
+        amount: Number(data.amount),
+        description: data.description,
+        dateIncurred: data.dateIncurred,
+        recordedBy: Number(data.recordedBy)
+      };
+      this.expenses.push(expense);
+      return {ok:true, expense:expense};
+    },
+
+    deleteExpense: function (id) {
+      var before = this.expenses.length;
+      this.expenses = this.expenses.filter(function (e) { return Number(e.expenseId) !== Number(id); });
+      if (this.expenses.length === before) return fail('Expense not found.');
+      this.renderAll();
+      if (window.SalesModule && typeof window.SalesModule.refresh === 'function') window.SalesModule.refresh();
+      toast('Expense deleted.', 'success');
+      return {ok:true};
+    },
+
+    getAllExpenses: function () { return this.expenses.slice(); },
+
+    getTotal: function () {
+      return this.expenses.reduce(function (sum,e) { return sum + Number(e.amount || 0); }, 0);
+    },
+
+    getTotalsByCategory: function () {
+      var totals = {Rent:0, Utilities:0, Supplies:0, 'Equipment Repair':0, Other:0};
+      this.expenses.forEach(function (e) { totals[e.category] = (totals[e.category] || 0) + Number(e.amount || 0); });
+      return totals;
+    },
+
+    renderAll: function () {
+      this.renderCategoryTotals();
+      this.renderGrandTotal();
+      this.renderRecords();
+    },
+
+    renderCategoryTotals: function () {
+      var body = document.getElementById('exTotalsBody');
+      if (!body) return;
+      var totals = this.getTotalsByCategory();
+      body.innerHTML = Object.keys(totals).map(function (category) {
+        return '<tr><td>' + esc(category) + '</td><td style="text-align:right;">' + peso(totals[category]) + '</td></tr>';
+      }).join('');
+    },
+
+    renderGrandTotal: function () {
+      var el = document.getElementById('exGrandTotal');
+      if (el) el.textContent = peso(this.getTotal());
+    },
+
+    renderRecords: function () {
+      var body = document.getElementById('exTableBody');
+      if (!body) return;
+      if (!this.expenses.length) { body.innerHTML = '<tr class="empty-row"><td colspan="7">No expense records yet.</td></tr>'; return; }
+      var users = this.users;
+      body.innerHTML = this.expenses.slice().sort(function(a,b){ return String(b.dateIncurred).localeCompare(String(a.dateIncurred)) || Number(b.expenseId)-Number(a.expenseId); }).map(function(e) {
+        var u = users.find(function(x){ return Number(x.userId)===Number(e.recordedBy); });
+        return '<tr><td>' + e.expenseId + '</td><td>' + esc(e.dateIncurred) + '</td><td>' + esc(e.category) +
+          '</td><td>' + esc(e.description) + '</td><td>' + peso(e.amount) + '</td><td>' +
+          esc(u ? (u.fullName || u.username) : ('User #' + e.recordedBy)) + '</td><td><button class="btn btn-danger btn-small" onclick="ExpensesModule.deleteExpense(' + e.expenseId + ')">Delete</button></td></tr>';
+      }).join('');
+    }
+  };
+
+  function val(id){var e=document.getElementById(id);return e?e.value:'';}
+  function todayKey(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  function peso(n){return '₱'+Number(n||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});}
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function fail(error){return {ok:false,error:error};}
+  function setError(id,msg){var e=document.getElementById(id);if(e)e.textContent=msg;}
+  function toast(msg,type){if(typeof window.gsToast==='function')window.gsToast(msg,type);}
+})();
+
 
 /* ================= seed data + bootstrap (demo wiring) ================= */
 window.gsSeedMode = true;
