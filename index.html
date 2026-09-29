@@ -1,338 +1,136 @@
+<!-- combined.html (Modules 7, 8, 9 Combined with CSS) -->
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Grea San Jave — Payments, Sales &amp; Expenses (Modules 7 · 8 · 9)</title>
-<style>
-/* __PASTE anika.css HERE__ */
-</style>
+    <title>Combined Modules (7, 8, 9)</title>
+    <!-- Links to the original CSS from the zip file -->
+    <link rel="stylesheet" href="css/anika.css">
+    <style>
+        /* Minimal layout structuring to separate the forms */
+        .module-section { margin-bottom: 20px; padding: 15px; border: 1px solid #ccc; }
+    </style>
 </head>
 <body>
-
-<header class="app-header">
-  <div class="brand">
-    <img src="grea_logo.jpg" alt="Grea San Jave logo">
-    <div class="brand-text"><span class="secondary">Grea</span> San <span class="accent">Jave</span></div>
-  </div>
-  <nav class="app-nav">
-    <a href="#" id="navPayments" class="active" onclick="showSection('payments'); return false;">Payments &amp; Receipts</a>
-    <a href="#" id="navSales" onclick="showSection('sales'); return false;">Sales Reports</a>
-    <a href="#" id="navExpenses" onclick="showSection('expenses'); return false;">Expenses</a>
-  </nav>
-  <div class="session-info"><span>Owner panel — Modules 7, 8, 9</span></div>
-</header>
-
-<main>
-
-<!-- ================= MODULE 7: PAYMENTS & RECEIPTS ================= -->
-<section id="section-payments">
-  <h1 class="page-title">Payments &amp; Receipts</h1>
-  <p class="page-subtitle">Record payments, confirm them in FIFO order, and issue acknowledgment receipts once an order is fully paid.</p>
-
-  <div class="card">
-    <h2 class="card-title">Record a Payment</h2>
-    <form id="pmForm" novalidate>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="pmOrderSelect">Order</label>
-          <select id="pmOrderSelect"></select>
-        </div>
-        <div class="form-group">
-          <label for="pmAmount">Amount (&#8369;)</label>
-          <input type="number" id="pmAmount" min="1" step="0.01">
-        </div>
-        <div class="form-group">
-          <label for="pmMethod">Payment method</label>
-          <select id="pmMethod">
+    <div class="module-section">
+        <h2>Module 7: Payments & Receipts</h2>
+        <input type="number" id="orderId" placeholder="Order ID">
+        <input type="number" id="payAmount" placeholder="Amount">
+        <select id="paymentMethod">
             <option value="Cash">Cash</option>
             <option value="GCash">GCash</option>
             <option value="Bank Transfer">Bank Transfer</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group" id="pmProofWrap" style="display:none;">
-          <label for="pmProof">Proof of payment (screenshot)</label>
-          <input type="file" id="pmProof" accept="image/*">
-          <div class="field-hint">Required for GCash / Bank Transfer (client interview Q17–Q18).</div>
-        </div>
-        <div class="form-group">
-          <label for="pmIsDown">Payment type</label>
-          <div class="privacy-consent" style="margin-top:0.4rem;">
-            <input type="checkbox" id="pmIsDown">
-            <label for="pmIsDown">This is a down payment (partial)</label>
-          </div>
-        </div>
-      </div>
-      <div class="field-error" id="pmFormError"></div>
-      <button type="submit" class="btn btn-primary">Queue payment for confirmation</button>
-    </form>
-  </div>
-
-  <div class="card">
-    <h2 class="card-title">Confirmation Queue (FIFO)</h2>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Position</th><th>Order</th><th>Customer</th><th>Amount</th><th>Method</th><th>Type</th><th>Proof</th><th>Action</th></tr></thead>
-        <tbody id="pmPendingBody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="dashboard-columns">
-    <div class="card">
-      <h2 class="card-title">Confirmed Payments</h2>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>ID</th><th>Order</th><th>Customer</th><th>Amount</th><th>Method</th><th>Type</th><th>Proof</th><th>Received</th></tr></thead>
-          <tbody id="pmPaymentsBody"></tbody>
-        </table>
-      </div>
-    </div>
-    <div class="card">
-      <h2 class="card-title">Receipts</h2>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>ID</th><th>Order</th><th>Customer</th><th>Total</th><th>Issued</th><th></th></tr></thead>
-          <tbody id="pmReceiptsBody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ================= MODULE 8: SALES REPORTING ================= -->
-<section id="section-sales" style="display:none;">
-  <h1 class="page-title">Sales Reporting</h1>
-  <p class="page-subtitle">Aggregates completed orders against logged expenses to show gross revenue, expenses, and net profit by day, week, or month.</p>
-
-  <div class="stat-grid">
-    <div class="stat-card"><div class="stat-value" id="srStatOrders">0</div><div class="stat-label">Completed orders</div></div>
-    <div class="stat-card"><div class="stat-value" id="srStatRush">0</div><div class="stat-label">Rush orders</div></div>
-    <div class="stat-card"><div class="stat-value" id="srStatRevenue">&#8369;0.00</div><div class="stat-label">Gross revenue</div></div>
-    <div class="stat-card"><div class="stat-value" id="srStatExpenses">&#8369;0.00</div><div class="stat-label">Expenses</div></div>
-    <div class="stat-card"><div class="stat-value" id="srStatNet">&#8369;0.00</div><div class="stat-label">Net profit</div></div>
-  </div>
-
-  <div class="card">
-    <h2 class="card-title">Report settings</h2>
-    <div class="toolbar">
-      <div class="form-group">
-        <label for="srPeriod">Period</label>
-        <select id="srPeriod">
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
         </select>
-      </div>
-      <div class="form-group"><label for="srFrom">From</label><input type="date" id="srFrom"></div>
-      <div class="form-group"><label for="srTo">To</label><input type="date" id="srTo"></div>
-      <div class="form-group">
-        <div class="privacy-consent" style="margin:0;">
-          <input type="checkbox" id="srExamWeek">
-          <label for="srExamWeek">Mark range as exam week</label>
-        </div>
-      </div>
-      <div class="form-group"><button class="btn btn-primary" id="btnSrGenerate">Generate report</button></div>
+        <input type="text" id="proofOfPayment" placeholder="Proof File (if non-cash)">
+        <button onclick="processPayment()">Submit Payment</button>
+        <div id="receiptOutput"></div>
     </div>
-  </div>
 
-  <div class="card">
-    <h2 class="card-title">Report</h2>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th onclick="SalesModule.sortBy('reportDate')">Period<span class="sort-arrow" id="srArrow-reportDate"></span></th>
-            <th onclick="SalesModule.sortBy('totalOrders')">Orders<span class="sort-arrow" id="srArrow-totalOrders"></span></th>
-            <th>Rush</th>
-            <th onclick="SalesModule.sortBy('totalRevenue')">Revenue<span class="sort-arrow" id="srArrow-totalRevenue"></span></th>
-            <th onclick="SalesModule.sortBy('totalExpenses')">Expenses<span class="sort-arrow" id="srArrow-totalExpenses"></span></th>
-            <th onclick="SalesModule.sortBy('netProfit')">Net profit<span class="sort-arrow" id="srArrow-netProfit"></span></th>
-            <th>Exam week</th>
-          </tr>
-        </thead>
-        <tbody id="srTableBody"></tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-<!-- ================= MODULE 9: EXPENSE MANAGEMENT ================= -->
-<section id="section-expenses" style="display:none;">
-  <h1 class="page-title">Expense Management</h1>
-  <p class="page-subtitle">Log business expenses by category. Expense totals feed the net-profit view in Sales Reporting (Module 8).</p>
-
-  <div class="card">
-    <h2 class="card-title">Log an Expense</h2>
-    <form id="exForm" novalidate>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="exCategory">Category</label>
-          <select id="exCategory">
+    <div class="module-section">
+        <h2>Module 9: Expense Management</h2>
+        <select id="expenseCategory">
             <option value="Rent">Rent</option>
             <option value="Utilities">Utilities</option>
             <option value="Supplies">Supplies</option>
             <option value="Equipment Repair">Equipment Repair</option>
             <option value="Other">Other</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="exAmount">Amount (&#8369;)</label>
-          <input type="number" id="exAmount" min="1" step="0.01">
-        </div>
-        <div class="form-group"><label for="exDate">Date incurred</label><input type="date" id="exDate"></div>
-        <div class="form-group"><label for="exRecordedBy">Recorded by</label><select id="exRecordedBy"></select></div>
-      </div>
-      <div class="form-group">
-        <label for="exDescription">Description</label>
-        <input type="text" id="exDescription" placeholder="e.g. Bond paper (10 reams)">
-      </div>
-      <div class="field-error" id="exFormError"></div>
-      <button type="submit" class="btn btn-primary">Add expense</button>
-    </form>
-  </div>
-
-  <div class="dashboard-columns">
-    <div class="card">
-      <h2 class="card-title">Totals by Category</h2>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Category</th><th style="text-align:right;">Total</th></tr></thead>
-          <tbody id="exTotalsBody"></tbody>
-        </table>
-      </div>
+        </select>
+        <input type="number" id="expAmount" placeholder="Amount">
+        <input type="text" id="expenseDesc" placeholder="Description">
+        <button onclick="addExpense()">Log Expense</button>
+        <div id="expenseOutput"></div>
     </div>
-    <div class="card">
-      <h2 class="card-title">Grand Total (all expenses)</h2>
-      <div class="stat-value" id="exGrandTotal">&#8369;0.00</div>
-      <div class="stat-label">Feeds Module 8 netProfit = revenue − expenses</div>
+
+    <div class="module-section">
+        <h2>Module 8: Sales Reporting</h2>
+        <label><input type="checkbox" id="isExamWeek"> Is Exam Week?</label>
+        <button onclick="generateReport()">Generate Daily Report</button>
+        <div id="reportOutput"></div>
     </div>
-  </div>
 
-  <div class="card">
-    <h2 class="card-title">Expense Records</h2>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>ID</th><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Recorded by</th><th></th></tr></thead>
-        <tbody id="exTableBody"></tbody>
-      </table>
-    </div>
-  </div>
-</section>
+    <script>
+        // Shared State Data Structures
+        let payments = [];
+        let receipts = [];
+        let expenses = [];
+        let paymentIdCounter = 1;
+        let receiptIdCounter = 1;
+        let expenseIdCounter = 1;
 
-</main>
+        // Module 7 Logic
+        function processPayment() {
+            let orderId = parseInt(document.getElementById("orderId").value);
+            let amount = parseFloat(document.getElementById("payAmount").value);
+            let method = document.getElementById("paymentMethod").value;
+            let proof = document.getElementById("proofOfPayment").value;
 
-<div id="toastContainer"></div>
+            if (method !== "Cash" && proof === "") {
+                document.getElementById("receiptOutput").innerText = "Error: Proof of payment required for " + method + "";
+                return;
+            }
 
-<div class="modal-overlay" id="receiptModal">
-  <div class="modal-box">
-    <h3 class="card-title">Acknowledgment Receipt</h3>
-    <div id="receiptModalBody"></div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeReceiptModal()">Close</button>
-    </div>
-  </div>
-</div>
+            let newPayment = {
+                paymentId: paymentIdCounter++,
+                orderId: orderId,
+                amount: amount,
+                paymentMethod: method,
+                proofOfPaymentFile: method === "Cash" ? null : proof
+            };
+            
+            payments[payments.length] = newPayment; // No .push()
 
-<script>
-// __PASTE module7-payments.js, module8-sales.js, module9-expenses.js HERE__
+            let newReceipt = {
+                receiptId: receiptIdCounter++,
+                orderId: orderId,
+                totalPrice: amount,
+                dateIssued: new Date().toISOString()
+            };
+            
+            receipts[receipts.length] = newReceipt;
 
-/* ================= seed data + bootstrap (demo wiring) ================= */
-window.gsSeedMode = true;
+            document.getElementById("receiptOutput").innerText = "Payment Added! Receipt ID: " + newReceipt.receiptId;
+        }
 
-function gsOffsetKey(offset) {
-  var t = srParseDay(srTodayKey());
-  return srDayKey(t + offset);
-}
+        // Module 9 Logic
+        function addExpense() {
+            let category = document.getElementById("expenseCategory").value;
+            let amount = parseFloat(document.getElementById("expAmount").value);
+            let desc = document.getElementById("expenseDesc").value;
 
-var gsUsers = [
-  { userId: 1, fullName: "Margie (Co-owner)", username: "margie", role: "coOwner" },
-  { userId: 2, fullName: "Grea (Co-owner)",   username: "grea",   role: "coOwner" }
-];
+            let newExpense = {
+                expenseId: expenseIdCounter++,
+                category: category,
+                amount: amount,
+                description: desc,
+                dateIncurred: new Date().toISOString()
+            };
 
-/* Seed orders — dates are generated relative to today so the demo always
-   shows data in the default last-14-days sales range. In the full system
-   these records are owned by Module 5 (Order Management). */
-var gsOrders = [
-  { orderId: 101, customerId: 1, customerName: "Ana Cruz",     fileName: "thesis_ch1-3.pdf",    serviceType: "Document Printing", serviceOption: "Spiral Binding",  paperSize: "A4",    pages: 20,  copies: 5, colorTier: "Minimal Color", isRush: false, queueType: "walkIn",  pricePerPage: 5,  baseTotalPrice: 500,  promoId: null, discountAmount: 200, totalPrice: 300,  requiresDownPayment: false, downPaymentAmount: 0,    paymentMethod: "GCash",         paymentStatus: "pending", proofOfPaymentFile: null, status: "done",      dateAdded: gsOffsetKey(-4),  dateCompleted: gsOffsetKey(-2),  unclaimedReason: null, daysUnclaimed: null },
-  { orderId: 102, customerId: 2, customerName: "Brian Santos", fileName: "case_study.pdf",      serviceType: "Document Printing", serviceOption: "None",            paperSize: "A4",    pages: 50,  copies: 1, colorTier: "Black Text",    isRush: false, queueType: "walkIn",  pricePerPage: 3,  baseTotalPrice: 150,  promoId: null, discountAmount: 0,   totalPrice: 150,  requiresDownPayment: true,  downPaymentAmount: 100,  paymentMethod: "Cash",          paymentStatus: "pending", proofOfPaymentFile: null, status: "done",      dateAdded: gsOffsetKey(-4),  dateCompleted: gsOffsetKey(-3),  unclaimedReason: null, daysUnclaimed: null },
-  { orderId: 103, customerId: 3, customerName: "Clara Reyes",  fileName: "portfolio.pdf",       serviceType: "Document Printing", serviceOption: "Lamination",      paperSize: "Short", pages: 32,  copies: 2, colorTier: "Full Color",    isRush: true,  queueType: "advance", pricePerPage: 20, baseTotalPrice: 1280, promoId: null, discountAmount: 640, totalPrice: 640,  requiresDownPayment: false, downPaymentAmount: 0,    paymentMethod: "Cash",          paymentStatus: "pending", proofOfPaymentFile: null, status: "done",      dateAdded: gsOffsetKey(-6),  dateCompleted: gsOffsetKey(-5),  unclaimedReason: null, daysUnclaimed: null },
-  { orderId: 104, customerId: 4, customerName: "Daniel Kim",   fileName: "lab_report.pdf",      serviceType: "Document Printing", serviceOption: "None",            paperSize: "A4",    pages: 32,  copies: 1, colorTier: "Black Text",    isRush: false, queueType: "walkIn",  pricePerPage: 3,  baseTotalPrice: 96,   promoId: null, discountAmount: 0,   totalPrice: 96,   requiresDownPayment: false, downPaymentAmount: 0,    paymentMethod: "Bank Transfer", paymentStatus: "pending", proofOfPaymentFile: null, status: "done",      dateAdded: gsOffsetKey(-7),  dateCompleted: gsOffsetKey(-6),  unclaimedReason: null, daysUnclaimed: null },
-  { orderId: 105, customerId: 5, customerName: "Ella Mendoza", fileName: "handouts.pdf",        serviceType: "Document Printing", serviceOption: "None",            paperSize: "A4",    pages: 150, copies: 1, colorTier: "Minimal Color", isRush: false, queueType: "advance", pricePerPage: 5,  baseTotalPrice: 750,  promoId: null, discountAmount: 300, totalPrice: 450,  requiresDownPayment: false, downPaymentAmount: 0,    paymentMethod: "GCash",         paymentStatus: "pending", proofOfPaymentFile: null, status: "done",      dateAdded: gsOffsetKey(-9),  dateCompleted: gsOffsetKey(-8),  unclaimedReason: null, daysUnclaimed: null },
-  { orderId: 106, customerId: 6, customerName: "Farhan Ali",   fileName: "resume_batch.pdf",    serviceType: "Document Printing", serviceOption: "None",            paperSize: "Short", pages: 55,  copies: 4, colorTier: "Black Text",    isRush: false, queueType: "walkIn",  pricePerPage: 3,  baseTotalPrice: 660,  promoId: null, discountAmount: 440, totalPrice: 220,  requiresDownPayment: false, downPaymentAmount: 0,    paymentMethod: "Cash",          paymentStatus: "pending", proofOfPaymentFile: null, status: "done",      dateAdded: gsOffsetKey(-11), dateCompleted: gsOffsetKey(-10), unclaimedReason: null, daysUnclaimed: null },
-  { orderId: 107, customerId: 7, customerName: "Gina Torres",  fileName: "yearbook_pages.pdf",  serviceType: "Bookbinding",       serviceOption: "Perfect Binding", paperSize: "A4",    pages: 40,  copies: 1, colorTier: "Small Image",   isRush: false, queueType: "advance", pricePerPage: 10, baseTotalPrice: 400,  promoId: null, discountAmount: 0,   totalPrice: 500,  requiresDownPayment: false, downPaymentAmount: 0,    paymentMethod: "GCash",         paymentStatus: "pending", proofOfPaymentFile: null, status: "done",      dateAdded: gsOffsetKey(-3),  dateCompleted: gsOffsetKey(-1),  unclaimedReason: null, daysUnclaimed: null },
-  { orderId: 108, customerId: 8, customerName: "Hannah Lim",   fileName: "flyers.pdf",          serviceType: "Document Printing", serviceOption: "None",            paperSize: "A4",    pages: 60,  copies: 3, colorTier: "Full Color",    isRush: false, queueType: "walkIn",  pricePerPage: 20, baseTotalPrice: 3600, promoId: null, discountAmount: 0,   totalPrice: 3600, requiresDownPayment: true,  downPaymentAmount: 1800, paymentMethod: "Cash",          paymentStatus: "pending", proofOfPaymentFile: null, status: "printing",  dateAdded: gsOffsetKey(-1),  dateCompleted: null,               unclaimedReason: null, daysUnclaimed: null },
-  { orderId: 109, customerId: 9, customerName: "Ivan Cruz",    fileName: "module_reader.pdf",   serviceType: "Document Printing", serviceOption: "Spiral Binding",  paperSize: "A4",    pages: 80,  copies: 1, colorTier: "Black Text",    isRush: false, queueType: "walkIn",  pricePerPage: 3,  baseTotalPrice: 240,  promoId: null, discountAmount: 120, totalPrice: 120,  requiresDownPayment: false, downPaymentAmount: 0,    paymentMethod: "Cash",          paymentStatus: "pending", proofOfPaymentFile: null, status: "queued",    dateAdded: gsOffsetKey(0),   dateCompleted: null,               unclaimedReason: null, daysUnclaimed: null },
-  { orderId: 110, customerId: 10, customerName: "Jasmine Yu",  fileName: "class_notes.pdf",     serviceType: "Document Printing", serviceOption: "None",            paperSize: "A4",    pages: 30,  copies: 3, colorTier: "Black Text",    isRush: false, queueType: "walkIn",  pricePerPage: 3,  baseTotalPrice: 270,  promoId: null, discountAmount: 180, totalPrice: 90,   requiresDownPayment: false, downPaymentAmount: 0,    paymentMethod: "Cash",          paymentStatus: "pending", proofOfPaymentFile: null, status: "cancelled", dateAdded: gsOffsetKey(-9),  dateCompleted: null,               unclaimedReason: "cancelled classes", daysUnclaimed: null },
-  { orderId: 111, customerId: 11, customerName: "Karl Ramos",  fileName: "btech_blueprint.pdf", serviceType: "Document Printing", serviceOption: "None",            paperSize: "A3",    pages: 40,  copies: 2, colorTier: "Small Image",   isRush: false, queueType: "advance", pricePerPage: 10, baseTotalPrice: 800,  promoId: null, discountAmount: 540, totalPrice: 260,  requiresDownPayment: false, downPaymentAmount: 0,    paymentMethod: "GCash",         paymentStatus: "pending", proofOfPaymentFile: null, status: "unclaimed", dateAdded: gsOffsetKey(-9),  dateCompleted: gsOffsetKey(-7),  unclaimedReason: "did not show up",   daysUnclaimed: 7 },
-  { orderId: 112, customerId: 12, customerName: "Liza Gomez",  fileName: "invite_cards.pdf",    serviceType: "Document Printing", serviceOption: "Lamination",      paperSize: "Short", pages: 36,  copies: 1, colorTier: "Minimal Color", isRush: true,  queueType: "advance", pricePerPage: 5,  baseTotalPrice: 180,  promoId: null, discountAmount: 0,   totalPrice: 180,  requiresDownPayment: false, downPaymentAmount: 0,    paymentMethod: "Cash",          paymentStatus: "pending", proofOfPaymentFile: null, status: "done",      dateAdded: gsOffsetKey(0),   dateCompleted: gsOffsetKey(0),   unclaimedReason: null, daysUnclaimed: null }
-];
+            expenses[expenses.length] = newExpense; // No .push()
+            document.getElementById("expenseOutput").innerText = "Expense Added: " + category + " - P" + amount;
+        }
 
-var gsSeedExpenses = [
-  { expenseId: 1, category: "Rent",             amount: 3000, description: "Monthly stall rent",       dateIncurred: gsOffsetKey(-7), recordedBy: 1 },
-  { expenseId: 2, category: "Utilities",        amount: 850,  description: "Electricity",              dateIncurred: gsOffsetKey(-5), recordedBy: 1 },
-  { expenseId: 3, category: "Supplies",         amount: 1200, description: "Bond paper (10 reams)",    dateIncurred: gsOffsetKey(-3), recordedBy: 2 },
-  { expenseId: 4, category: "Equipment Repair", amount: 1500, description: "Printer 2 service center", dateIncurred: gsOffsetKey(-2), recordedBy: 1 },
-  { expenseId: 5, category: "Supplies",         amount: 400,  description: "Ink refills",              dateIncurred: gsOffsetKey(0),  recordedBy: 2 }
-];
+        // Module 8 Logic
+        function generateReport() {
+            let totalRev = 0;
+            let totalExp = 0;
+            let isExam = document.getElementById("isExamWeek").checked;
 
-function gsSeedPayment(orderId, amount, method, isDown, proof) {
-  var r = PaymentsModule.recordPayment({
-    orderId: orderId, amount: amount, paymentMethod: method,
-    isDownPayment: isDown, proofOfPaymentFile: proof
-  });
-  if (r.ok) { PaymentsModule.confirmNextPayment(); }
-}
+            // Manual aggregation (No .reduce())
+            for (let i = 0; i < payments.length; i++) {
+                totalRev += payments[i].amount;
+            }
 
-document.addEventListener("DOMContentLoaded", function () {
-  ExpensesModule.init(gsSeedExpenses, null);
-  ExpensesModule.setUsers(gsUsers);
+            for (let j = 0; j < expenses.length; j++) {
+                totalExp += expenses[j].amount;
+            }
 
-  PaymentsModule.init(gsOrders, {
-    onPaymentReceived: function (type, order, payment) {   // Module 16 hook
-      if (window.gsSeedMode) { return; }
-      gsToast("Payment received for Order #" + order.orderId + ": " +
-        gsFormatPeso(payment.amount) + " (" + payment.paymentMethod + ")", "success");
-    }
-  });
+            let netProfit = totalRev - totalExp;
 
-  // Seed confirmed payment history through the public FIFO flow.
-  gsSeedPayment(101, 300, "GCash", false, "gcash_ref_0101.png");
-  gsSeedPayment(103, 640, "Cash", false, "");
-  gsSeedPayment(104, 96,  "Bank Transfer", false, "bt_ref_8842.png");
-  gsSeedPayment(105, 450, "GCash", false, "gcash_ref_0105.png");
-  gsSeedPayment(106, 220, "Cash", false, "");
-  gsSeedPayment(107, 500, "GCash", false, "gcash_ref_0107.png");
-  gsSeedPayment(112, 180, "Cash", false, "");
-  gsSeedPayment(102, 100, "Cash", true,  "");   // down payment — still partially paid
-
-  SalesModule.setExpenseProvider(function () { return ExpensesModule.getAllExpenses(); });
-  SalesModule.init(gsOrders);
-
-  window.gsSeedMode = false;
-  PaymentsModule.renderAll();
-});
-
-/* Section navigation — uses only .app-nav styles from anika.css (no tabs added) */
-function showSection(name) {
-  var sections = { payments: "section-payments", sales: "section-sales", expenses: "section-expenses" };
-  var navs = { payments: "navPayments", sales: "navSales", expenses: "navExpenses" };
-  var k;
-  for (k in sections) {
-    var sec = document.getElementById(sections[k]);
-    if (sec !== null) { sec.style.display = (k === name) ? "block" : "none"; }
-    var nav = document.getElementById(navs[k]);
-    if (nav !== null) { nav.className = (k === name) ? "active" : ""; }
-  }
-}
-
-function closeReceiptModal() {
-  var modal = document.getElementById("receiptModal");
-  if (modal !== null) { modal.className = "modal-overlay"; }
-}
-</script>
-
+            document.getElementById("reportOutput").innerText = 
+                "Gross Revenue: P" + totalRev + 
+                "\nTotal Expenses: P" + totalExp + 
+                "\nNet Profit: P" + netProfit + 
+                "\nExam Week: " + isExam;
+        }
+    </script>
 </body>
 </html>
